@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: eks-cluster-create-
+spec:
+  entrypoint: create-cluster
+  templates:
+  - name: create-cluster
+    steps:
+    - - name: run-eksctl
+        template: eksctl
+        arguments:
+          parameters:
+          - name: clusterName
+            value: tnos
+    - - name: print
+        template: print
+        arguments:
+          parameters:
+          - name: message
+            value: "{{steps.run-eksctl.outputs.result}}"
+  - name: eksctl
+    inputs:
+      parameters:
+      - name: clusterName
+        value: default
+    script:
+      image: alpine:latest
+      command: [sh]
+      source: |
+        apk add curl
+        curl --silent --location "https://github.com/weaveworks/eksctl/releases/download/latest_release/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+        mv /tmp/eksctl /usr/local/bin
+        echo eksctl create cluster -n {{inputs.parameters.clusterName}}
+  - name: print
+    inputs:
+      parameters:
+      - name: message
+    container:
+      image: docker/whalesay:latest
+      command: [cowsay]
+      args: ["{{inputs.parameters.message}}"]
