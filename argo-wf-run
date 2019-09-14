@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -e
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BASEDIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+function print_usage () {
+  cat <<EOF
+argo-wf-run runs an Argo workflow from the command line
+
+Usage:
+  argo-wf-run FILE [flags]   runs argo submit with a single workflow
+
+Example:
+  $ argo-wf-run https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
+EOF
+exit 1
+}
+
+if [[ -z "${1}" ]]; then
+  print_usage
+fi
+
+#VERSION="$(cat ${BASEDIR}/VERSION)"
+VERSION=latest
+docker rm -f argo-wf &> /dev/null || true
+docker run -d --name argo-wf \
+-e DOCKER_HOST=tcp://127.0.0.1:2375 \
+-e USING_DOCKER_EXEC=true \
+-e NO_WAIT_BEFORE_WATCH=true \
+--entrypoint=dockerd \
+--privileged thenatureofsoftware/argo-wf-run:$VERSION --host=tcp://0.0.0.0:2375 &> /dev/null
+docker exec -it argo-wf bash -c "./scripts/run-argo-wf.sh ${1}"
+docker rm -f argo-wf &> /dev/null || true

@@ -3,7 +3,7 @@ image: docker:19.03.2
 variables:
   DOCKER_HOST: tcp://docker:2375
   CLUSTER_NAME: argo-wf
-  REPO: thenatureofsoftware/argo-wf-runner
+  REPO: thenatureofsoftware/argo-wf-run
 
 stages:
   - build

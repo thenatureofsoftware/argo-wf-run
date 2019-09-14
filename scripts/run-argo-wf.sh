@@ -10,10 +10,13 @@ while [ -h "$SOURCE" ]; do
 done
 BASEDIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
-source ${BASEDIR}/start-argo-wf.sh
+source ${BASEDIR}/start-k3s.sh
 
 wf_name="$(argo submit ${1} -o json | jq -r .metadata.name | tee ${BASEDIR}/wf-id)"
-${BASEDIR}/wait_for.sh ${wf_name}
+
+if [[ -z "${NO_WAIT_BEFORE_WATCH}" ]]; then
+  ${BASEDIR}/wait_for.sh ${wf_name}
+fi
 
 argo watch ${wf_name}
 

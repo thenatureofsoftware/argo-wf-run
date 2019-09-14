@@ -14,11 +14,11 @@ docker build --no-cache -t thenatureofsoftware/argo-wf-runner:latest ${BASEDIR}/
 
 NETWORK=k3d
 
-docker rm -f docker
-docker network rm ${NETWORK} 
+docker rm -f docker || true
+docker network rm ${NETWORK} || true
 docker network create ${NETWORK}
 docker run -d --privileged --name docker --network ${NETWORK}  docker:19.03.2-dind dockerd --host=tcp://0.0.0.0:2375
-docker run --rm -it --entrypoint=sh \
+docker run --rm -it --entrypoint=bash \
 -e DOCKER_HOST=tcp://docker:2375/ \
 -v ${PWD}:/workspace \
 --network ${NETWORK} thenatureofsoftware/argo-wf-runner:latest

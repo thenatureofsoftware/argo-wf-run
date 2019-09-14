@@ -1,4 +1,4 @@
-FROM docker:19.03.2
+FROM docker:19.03.2-dind
 
 RUN apk --no-cache add bash curl jq \
 && mkdir /argo-wf \
@@ -12,6 +12,4 @@ RUN apk --no-cache add bash curl jq \
 WORKDIR /argo-wf
 
 COPY scripts /argo-wf/scripts
-COPY argo-workflow-manifest.yaml /argo-wf/
-
-ENTRYPOINT [ "/bin/bash", "-c" ]
+COPY manifests /argo-wf/manifests
