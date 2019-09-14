@@ -9,6 +9,8 @@ while [ -h "$SOURCE" ]; do
 done
 BASEDIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
+VERSION=${VERSION:-$(cat ${BASEDIR}/VERSION)}
+
 function print_usage () {
   cat <<EOF
 argo-wf-run runs an Argo workflow from the command line
@@ -49,8 +51,6 @@ function start_shell () {
   docker exec -it -e START_SHELL=true -w /work argo-wf bash --rcfile "./scripts/start-k3s.sh"
 }
 
-#VERSION="$(cat ${BASEDIR}/VERSION)"
-VERSION=latest
 docker rm -f argo-wf &> /dev/null || true
 docker run -d --name argo-wf \
 -e DOCKER_HOST=tcp://127.0.0.1:2375 \
@@ -58,7 +58,7 @@ docker run -d --name argo-wf \
 -e NO_WAIT_BEFORE_WATCH=true \
 -v $PWD:/work \
 --entrypoint=dockerd \
---privileged thenatureofsoftware/argo-wf-run:$VERSION --host=tcp://0.0.0.0:2375 &> /dev/null
+--privileged thenatureofsoftware/argo-wf-run:$VERSION --host=tcp://0.0.0.0:2375 1> /dev/null
 
 if [[ -z "${1}" ]]; then
   start_shell
