@@ -22,9 +22,32 @@ EOF
 exit 1
 }
 
-if [[ -z "${1}" ]]; then
-  print_usage
-fi
+function is_local_file () {
+  if [[ "$( echo "${1}" | grep 'http' )" == "" ]]; then
+    echo "true"
+    exit 0
+  fi
+  echo "false"
+}
+
+function run_wf_file () {
+  if [[ "$(is_local_file ${1} )" ]]; then
+    wf_file="/$(basename ${1})"
+    if [[ ! -f ${1} ]]; then
+      echo "file not found"
+      exit 1
+    fi
+    docker cp ${1} argo-wf:${wf_file}
+  else
+    wf_file="${1})"
+  fi
+
+  docker exec -it argo-wf bash -c "./scripts/run-argo-wf.sh ${wf_file}"
+}
+
+function start_shell () {
+  docker exec -it -e START_SHELL=true -w /work argo-wf bash --rcfile "./scripts/start-k3s.sh"
+}
 
 #VERSION="$(cat ${BASEDIR}/VERSION)"
 VERSION=latest
@@ -33,7 +56,14 @@ docker run -d --name argo-wf \
 -e DOCKER_HOST=tcp://127.0.0.1:2375 \
 -e USING_DOCKER_EXEC=true \
 -e NO_WAIT_BEFORE_WATCH=true \
+-v $PWD:/work \
 --entrypoint=dockerd \
 --privileged thenatureofsoftware/argo-wf-run:$VERSION --host=tcp://0.0.0.0:2375 &> /dev/null
-docker exec -it argo-wf bash -c "./scripts/run-argo-wf.sh ${1}"
+
+if [[ -z "${1}" ]]; then
+  start_shell
+else
+  run_wf_file ${1}
+fi
+
 docker rm -f argo-wf &> /dev/null || true
