@@ -33,3 +33,9 @@ kubectl create clusterrolebinding default-argo-cluster-role --serviceaccount def
 echo -n "Waiting for argo-workflow to start "
 until $([[ $(kubectl -n argo get pod -o json -l app=workflow-controller | jq -r '.items[0].status.phase') == 'Running' ]]); do printf "."; sleep 2; done
 echo " OK"
+
+if [[ ! -z "${START_SHELL}" ]]; then
+  export PS1="argo \w> "
+  set +e
+fi
+
