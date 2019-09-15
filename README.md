@@ -1,6 +1,6 @@
 # Argo Workflow Runner
 
-Let's you run any [Argo Workflow](https://github.com/argoproj/argo) from the command line
+Let's you run any [Argo Workflow](https://github.com/argoproj/argo) from the command line using [`k3d`](https://github.com/rancher/k3d) and [`k3s`](https://github.com/rancher/k3s).
 
 ## Use Cases
 
@@ -69,3 +69,10 @@ build1:
 ```
 `.gitlab-ci.yaml`
 
+## How it works
+
+The `argo-wf-run` script starts a Docker `dind` container with `k3d` and starts
+a single node `k3s` cluster and deploys `argo-workflow`. The script runs the
+workflow using the Docker `exec` command.
+
+When running in a GitLab CI/CD pipeline the Docker `dind` container is started as a `service` and the GitLab Runner starts the `argo-wf-run` container that connects to the Docker daemon on `tcp://docker:2375`.
