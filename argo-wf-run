@@ -1,69 +1,131 @@
 #!/usr/bin/env bash
-set -e
 
-SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]; do
-  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-BASEDIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+REPO_URL='https://gitlab.com/thenatureofsoftware/argo-wf-run'
+APP_NAME='argo-wf-run'
+VERSION=${VERSION:-v0.2}
 
-VERSION=${VERSION:-$(cat ${BASEDIR}/VERSION)}
-
-function print_usage () {
-  cat <<EOF
+function help () {
+  cat << EOF
 argo-wf-run runs an Argo workflow from the command line
 
 Usage:
-  argo-wf-run FILE [flags]   runs argo submit with a single workflow
+  argo-wf-run                        starts a shell for running workflows with argo cli
+  argo-wf-run (-f|--filename) FILE   runs argo submit with a single workflow
+
+Flags:
+  -f|--filename                      Argo workflow file to run
+  -v|--volume                        Bind mount a volume
+  -d|--directory                     Write workflow output to directory
 
 Example:
   $ argo-wf-run https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
 EOF
-exit 1
+}
+
+cleanUp() {
+  set +u
+  if [[ -n "${AWR_CONTAINER_ID}" ]]; then
+    echo "Removing container ${AWR_CONTAINER_ID}"
+    docker rm -f ${AWR_CONTAINER_ID} &> /dev/null
+  fi
+}
+
+onError() {
+  result=$?
+  if [ "$result" != "0" ]; then
+    if [[ -n "$INPUT_ARGUMENTS" ]]; then
+      echo -e "Failed to run $APP_NAME with the arguments provided: $INPUT_ARGUMENTS\n"
+      help
+    else
+      echo -e "Failed to run $APP_NAME\n"
+    fi
+    echo -e "\n\tFor support, go to $REPO_URL.\n"
+  fi
+  cleanUp
+  exit $result
+}
+
+workDir() {
+  IFS=':' read -ra PARTS <<< "${AWR_WF_VOLUME}"
+  echo -n ${PARTS[1]}
 }
 
 function is_local_file () {
-  if [[ "$( echo "${1}" | grep 'http' )" == "" ]]; then
-    echo "true"
-    exit 0
-  fi
-  echo "false"
+  [[ "$( echo "${AWR_WF_FILE}" | grep 'http' )" == "" ]]
 }
 
-function run_wf_file () {
-  if [[ "$(is_local_file ${1} )" ]]; then
-    wf_file="/$(basename ${1})"
-    if [[ ! -f ${1} ]]; then
-      echo "file not found"
-      exit 1
-    fi
-    docker cp ${1} argo-wf:${wf_file}
-  else
-    wf_file="${1})"
-  fi
+startContainer() {
+  AWR_WF_VOLUME=${AWR_WF_VOLUME:-$PWD:/work}
 
-  docker exec -it argo-wf bash -c "./scripts/run-argo-wf.sh ${wf_file}"
-}
-
-function start_shell () {
-  docker exec -it -e START_SHELL=true -w /work argo-wf bash --rcfile "./scripts/start-k3s.sh"
-}
-
-docker rm -f argo-wf &> /dev/null || true
-docker run -d --name argo-wf \
+  AWR_CONTAINER_ID=$(docker run -d \
 -e DOCKER_HOST=tcp://127.0.0.1:2375 \
 -e USING_DOCKER_EXEC=true \
 -e NO_WAIT_BEFORE_WATCH=true \
--v $PWD:/work \
+-v $AWR_WF_VOLUME \
 --entrypoint=dockerd \
---privileged thenatureofsoftware/argo-wf-run:$VERSION --host=tcp://0.0.0.0:2375 1> /dev/null
+--privileged thenatureofsoftware/argo-wf-run:$VERSION --host=tcp://0.0.0.0:2375)
+}
 
-if [[ -z "${1}" ]]; then
-  start_shell
+startShell() {
+  docker exec -it -e START_SHELL=true -w $(workDir) ${AWR_CONTAINER_ID} bash --rcfile "/argo-wf/scripts/start-k3s.sh"
+}
+
+runWorkflow() {
+  if is_local_file; then
+    wf_file="/$(basename ${AWR_WF_FILE})"
+    if [[ ! -f ${AWR_WF_FILE} ]]; then
+      echo "file not found"
+      exit 1
+    fi
+    docker cp ${AWR_WF_FILE} ${AWR_CONTAINER_ID}:${wf_file}
+  else
+    wf_file="${AWR_WF_FILE}"
+  fi
+  docker exec -it -w $(workDir) ${AWR_CONTAINER_ID} bash -c "/argo-wf/scripts/run-argo-wf.sh ${wf_file}"
+}
+
+###############################################################################
+# Main
+###############################################################################
+
+# Stop execution on any error
+trap "onError" EXIT
+set -e
+
+# Parsing input arguments (if any)
+export INPUT_ARGUMENTS="${@}"
+set -u
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    '--filename'|-f)
+      if [[ ! $# -gt 1 ]]; then exit 1; fi
+      AWR_WF_FILE=${2}
+      shift
+      ;;
+    '--volume'|-v)
+      if [[ ! $# -gt 1 ]]; then exit 1; fi
+      AWR_WF_VOLUME=${2}
+      shift
+      ;;
+    '--directory'|-d)
+      if [[ ! $# -gt 1 ]]; then exit 1; fi
+      AWR_WF_OUTDIR=${2}
+      shift
+      ;;
+    '--help'|-h)
+      help
+      exit 0
+      ;;
+    *) exit 1
+      ;;
+  esac
+  shift
+done
+set +u
+
+startContainer
+if [[ -z "${AWR_WF_FILE}" ]]; then
+  startShell
 else
-  run_wf_file ${1}
+  runWorkflow ${AWR_WF_FILE}
 fi
-
-docker rm -f argo-wf &> /dev/null || true
