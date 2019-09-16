@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-REPO_URL='https://gitlab.com/thenatureofsoftware/argo-wf-run'
+REPO_URL='https://github.com/TheNatureOfSoftware/argo-wf-run'
 APP_NAME='argo-wf-run'
 VERSION=${VERSION:-v0.3}
 AWR_WF_SERVICE="localhost"
@@ -41,7 +41,7 @@ onError() {
     else
       echo -e "Failed to run $APP_NAME\n"
     fi
-    echo -e "\n\tFor support, go to $REPO_URL.\n"
+    echo -e "\n\tFor help, go to $REPO_URL.\n"
   fi
   cleanUp
   exit $result
