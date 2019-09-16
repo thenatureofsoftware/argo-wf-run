@@ -65,6 +65,9 @@ image: thenatureofsoftware/argo-wf-run:latest
 
 variables:
   DOCKER_HOST: tcp://docker:2375
+  # It's the docker daemon that exposes the k3d
+  # cluster and we need to set the hostname for kubeconfig.
+  AWR_WF_SERVICE: docker
 
 services:
   - docker:19.03.2-dind
@@ -76,3 +79,14 @@ build1:
     - ./scripts/run-argo-wf.sh https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
 ```
 `.gitlab-ci.yaml`
+
+### Workflow artifacts
+
+When a workflow produces output/artifact you need to add the `--directory|-d` flag to create
+a default artifact repository. When the `-d` flag is set `argo-wf-run` will configure a
+Default [Minio](https://min.io/) Artifact Repository and copy the artifacts to the specified
+directory when the workflow is finished.
+
+When running in a pipeline and invoking the `./scripts/run-argo-wf.sh` with a workflow
+that produces artifacts you need to make sure the `/argo-wf_artifacts` directory exists.
+

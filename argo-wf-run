@@ -3,6 +3,7 @@
 REPO_URL='https://gitlab.com/thenatureofsoftware/argo-wf-run'
 APP_NAME='argo-wf-run'
 VERSION=${VERSION:-v0.2}
+AWR_WF_SERVICE="localhost"
 
 function help () {
   cat << EOF
@@ -16,6 +17,7 @@ Flags:
   -f|--filename                      Argo workflow file to run
   -v|--volume                        Bind mount a volume
   -d|--directory                     Write workflow output to directory
+  -s|--service                       The hostname where to find k3s
 
 Example:
   $ argo-wf-run https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
@@ -54,14 +56,22 @@ function is_local_file () {
   [[ "$( echo "${AWR_WF_FILE}" | grep 'http' )" == "" ]]
 }
 
+function volumes() {
+  if [[ -n "${AWR_WF_ARTIFACTS}" ]]; then
+    echo -n "-v ${AWR_WF_ARTIFACTS}:/argo-wf-artifacts -v $AWR_WF_VOLUME"
+  else
+    echo -n "-v $AWR_WF_VOLUME"
+  fi
+}
+
 startContainer() {
   AWR_WF_VOLUME=${AWR_WF_VOLUME:-$PWD:/work}
 
   AWR_CONTAINER_ID=$(docker run -d \
 -e DOCKER_HOST=tcp://127.0.0.1:2375 \
--e USING_DOCKER_EXEC=true \
+-e AWR_WF_SERVICE=${AWR_WF_SERVICE} \
 -e NO_WAIT_BEFORE_WATCH=true \
--v $AWR_WF_VOLUME \
+$(volumes) \
 --entrypoint=dockerd \
 --privileged thenatureofsoftware/argo-wf-run:$VERSION --host=tcp://0.0.0.0:2375)
 }
@@ -109,7 +119,13 @@ while [[ $# -gt 0 ]]; do
       ;;
     '--directory'|-d)
       if [[ ! $# -gt 1 ]]; then exit 1; fi
-      AWR_WF_OUTDIR=${2}
+      if [[ ! -d ${2} ]]; then echo -e "Directory not found!\n"; exit 1; fi
+      AWR_WF_ARTIFACTS="$(cd ${2} && pwd)"
+      shift
+      ;;
+    '--service'|-s)
+      if [[ ! $# -gt 1 ]]; then exit 1; fi
+      AWR_WF_SERVICE=${2}
       shift
       ;;
     '--help'|-h)

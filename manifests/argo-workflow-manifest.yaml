@@ -240,6 +240,17 @@ metadata:
 data:
   config: |
     containerRuntimeExecutor: pns
+    artifactRepository:
+      s3:
+        bucket: argo
+        endpoint: minio.default:9000
+        insecure: true
+        accessKeySecret:
+          name: minio
+          key: accesskey
+        secretKeySecret:
+          name: minio
+          key: secretkey
 ---
 apiVersion: apps/v1
 kind: Deployment

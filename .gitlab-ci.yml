@@ -2,6 +2,7 @@ image: docker:19.03.2
 
 variables:
   DOCKER_HOST: tcp://docker:2375
+  AWR_WF_SERVICE: docker
   CLUSTER_NAME: argo-wf
   REPO: thenatureofsoftware/argo-wf-run
 
