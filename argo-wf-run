@@ -2,7 +2,7 @@
 
 REPO_URL='https://gitlab.com/thenatureofsoftware/argo-wf-run'
 APP_NAME='argo-wf-run'
-VERSION=${VERSION:-v0.2}
+VERSION=${VERSION:-v0.3}
 AWR_WF_SERVICE="localhost"
 
 function help () {
