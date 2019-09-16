@@ -1,5 +1,7 @@
 FROM docker:19.03.2-dind
 
+ENV AWR_WF_SERVICE=localhost
+
 RUN apk --no-cache add bash curl jq \
 && mkdir /argo-wf \
 && curl -sSL -o /usr/local/bin/argo https://github.com/argoproj/argo/releases/download/v2.3.0/argo-linux-amd64 \
@@ -7,7 +9,9 @@ RUN apk --no-cache add bash curl jq \
 && curl -sSL -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl \
 && chmod +x /usr/local/bin/kubectl \
 && curl -sSL -o /usr/local/bin/k3d https://github.com/rancher/k3d/releases/download/v1.3.1/k3d-linux-amd64 \
-&& chmod +x /usr/local/bin/k3d
+&& chmod +x /usr/local/bin/k3d \
+&& curl -sSL -o /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc \
+&& chmod +x /usr/local/bin/mc
 
 WORKDIR /argo-wf
 
