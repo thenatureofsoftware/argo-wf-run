@@ -4,6 +4,9 @@ REPO_URL='https://github.com/TheNatureOfSoftware/argo-wf-run'
 APP_NAME='argo-wf-run'
 VERSION=${VERSION:-v0.3}
 AWR_WF_SERVICE="localhost"
+AWR_WF_PARAMETERS=""
+
+declare -a AWR_WF_ARGO_ARGS
 
 function help () {
   cat << EOF
@@ -18,10 +21,38 @@ Flags:
   -v|--volume                        Bind mount a volume
   -d|--directory                     Write workflow output to directory
   -s|--service                       The hostname where to find k3s
+  -p|--parameter                     Pass an input parameter
+  --parameter-file                   Pass a file containing all input parameters
+  -w|--wait                          Wait for the workflow to complete
 
 Example:
-  $ argo-wf-run https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
+  $ argo-wf-run -f https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
 EOF
+}
+
+# Thanks to https://gist.github.com/cdown/1163649
+urlencode() {
+  # urlencode <string>
+  old_lc_collate=$LC_COLLATE
+  LC_COLLATE=C
+  
+  local length="${#1}"
+  for (( i = 0; i < length; i++ )); do
+      local c="${1:i:1}"
+      case $c in
+          [a-zA-Z0-9.~_-]) printf "$c" ;;
+          *) printf '%%%02X' "'$c" ;;
+      esac
+  done
+  
+  LC_COLLATE=$old_lc_collate
+}
+
+urldecode() {
+  # urldecode <string>
+
+  local url_encoded="${1//+/ }"
+  printf '%b' "${url_encoded//%/\\x}"
 }
 
 cleanUp() {
@@ -35,12 +66,7 @@ cleanUp() {
 onError() {
   result=$?
   if [ "$result" != "0" ]; then
-    if [[ -n "$INPUT_ARGUMENTS" ]]; then
-      echo -e "Failed to run $APP_NAME with the arguments provided: $INPUT_ARGUMENTS\n"
-      help
-    else
-      echo -e "Failed to run $APP_NAME\n"
-    fi
+    echo -e "Failed to run $APP_NAME with the arguments provided: $@\n"
     echo -e "\n\tFor help, go to $REPO_URL.\n"
   fi
   cleanUp
@@ -56,6 +82,14 @@ function is_local_file () {
   [[ "$( echo "${AWR_WF_FILE}" | grep 'http' )" == "" ]]
 }
 
+function append_parameter() {
+  if [[ "${AWR_WF_PARAMETERS}" == "" ]]; then
+    AWR_WF_PARAMETERS="${1}: "${@:2}""
+  else
+    AWR_WF_PARAMETERS="${AWR_WF_PARAMETERS}\n${1}: "${@:2}""
+  fi
+}
+
 function volumes() {
   if [[ -n "${AWR_WF_ARTIFACTS}" ]]; then
     echo -n "-v ${AWR_WF_ARTIFACTS}:/argo-wf-artifacts -v $AWR_WF_VOLUME"
@@ -66,7 +100,6 @@ function volumes() {
 
 startContainer() {
   AWR_WF_VOLUME=${AWR_WF_VOLUME:-$PWD:/work}
-
   AWR_CONTAINER_ID=$(docker run -d \
 -e DOCKER_HOST=tcp://127.0.0.1:2375 \
 -e AWR_WF_SERVICE=${AWR_WF_SERVICE} \
@@ -91,7 +124,9 @@ runWorkflow() {
   else
     wf_file="${AWR_WF_FILE}"
   fi
-  docker exec -it -w $(workDir) ${AWR_CONTAINER_ID} bash -c "/argo-wf/scripts/run-argo-wf.sh ${wf_file}"
+  docker exec -it \
+  -e AWR_WF_PARAMETERS=$(urlencode "${AWR_WF_PARAMETERS}") \
+  -w $(workDir) ${AWR_CONTAINER_ID} bash -x -c "/argo-wf/scripts/run-argo-wf.sh ${wf_file} ${AWR_WF_ARGO_ARGS[@]}"
 }
 
 ###############################################################################
@@ -102,33 +137,68 @@ runWorkflow() {
 trap "onError" EXIT
 set -e
 
-# Parsing input arguments (if any)
-export INPUT_ARGUMENTS="${@}"
+# Replace GNU-style long options so that we can use getopts
+declare -a args
+for arg in "$@"; do
+  case "$arg" in
+    '--filename')
+      args+=('-f')
+      ;;
+    '--volume')
+      args+=('-v')
+      ;;
+    '--directory')
+      args+=('-d')
+      ;;
+    '--service')
+      args+=('-s')
+      ;;
+    '--parameter'|-p)
+      #args+=('-p')
+      ;;
+    '--parameter-file')
+      #args+=('-P')
+      ;;
+    *)
+      if [[ "$prev_arg" == "--parameter" ]] || [[ "$prev_arg" == "-p" ]]; then
+        parr=($(echo "$arg" | awk '{split($0,a,"="); print a[1],a[2]}'))
+        append_parameter "${parr[0]}" "${parr[@]:1}"
+      elif [[ "$prev_arg" == "--parameter-file" ]]; then
+        if [[ ! -f ${arg} ]]; then
+          echo "Parameter file not found!"
+          exit 1
+        fi
+        while read param; do
+          parr=($(echo "$param" | awk '{split($0,a,":"); print a[1],a[2]}'))
+          append_parameter "${parr[0]}" "$(echo -n ${parr[@]:1} | sed -e 's/^[[:space:]]*//')"
+        done <${arg}
+      else
+        args+=("$arg")
+      fi
+      ;;
+  esac
+  prev_arg="$arg"
+done
+
 set -u
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    '--filename'|-f)
-      if [[ ! $# -gt 1 ]]; then exit 1; fi
-      AWR_WF_FILE=${2}
-      shift
+while getopts ":f:v:d:s:p:P:wh" opt ${args[@]}; do
+  case $opt in
+    '--filename'|f)
+      AWR_WF_FILE="${OPTARG}"
       ;;
-    '--volume'|-v)
-      if [[ ! $# -gt 1 ]]; then exit 1; fi
-      AWR_WF_VOLUME=${2}
-      shift
+    '--volume'|v)
+      AWR_WF_VOLUME="${OPTARG}"
       ;;
-    '--directory'|-d)
-      if [[ ! $# -gt 1 ]]; then exit 1; fi
-      if [[ ! -d ${2} ]]; then echo -e "Directory not found!\n"; exit 1; fi
-      AWR_WF_ARTIFACTS="$(cd ${2} && pwd)"
-      shift
+    '--directory'|d)
+      AWR_WF_ARTIFACTS="$(cd ${OPTARG} && pwd)"
       ;;
-    '--service'|-s)
-      if [[ ! $# -gt 1 ]]; then exit 1; fi
-      AWR_WF_SERVICE=${2}
-      shift
+    '--service'|s)
+      AWR_WF_SERVICE=${OPTARG}
       ;;
-    '--help'|-h)
+    '--wait'|w)
+      AWR_WF_ARGO_ARGS+=("-$opt")
+      ;;
+    '--help'|h)
       help
       exit 0
       ;;
@@ -143,5 +213,5 @@ startContainer
 if [[ -z "${AWR_WF_FILE}" ]]; then
   startShell
 else
-  runWorkflow ${AWR_WF_FILE}
+  runWorkflow
 fi

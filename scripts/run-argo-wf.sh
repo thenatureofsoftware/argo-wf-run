@@ -10,17 +10,30 @@ while [ -h "$SOURCE" ]; do
 done
 BASEDIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
+function urldecode() {
+  # urldecode <string>
+  local url_encoded="${1//+/ }"
+  printf '%b' "${url_encoded//%/\\x}"
+}
+
+function parameters() {
+  if [[ -z "${AWR_WF_PARAMETERS}" ]]; then
+    echo -n ""
+  else
+    echo -e "$(urldecode "${AWR_WF_PARAMETERS}")" > /argo-wf-run-parameters.yaml
+    echo -n "--parameter-file /argo-wf-run-parameters.yaml "
+  fi
+}
+
 source ${BASEDIR}/start-k3s.sh
 
-wf_name="$(argo submit ${1} -o json | jq -r .metadata.name | tee ${BASEDIR}/wf-id)"
+wf_file="${1}"
+shift
 
-if [[ -z "${NO_WAIT_BEFORE_WATCH}" ]]; then
-  ${BASEDIR}/wait_for.sh ${wf_name}
-fi
+argo submit ${wf_file} $@ $(parameters)-o json | jq -r .metadata.name | tee wf-id
+wf="$(cat wf-id)"
+argo watch "${wf}"
 
-argo watch ${wf_name}
-
-wf="$(cat ${BASEDIR}/wf-id)"
 if [[ ! "$(kubectl get Workflow ${wf} -o json | jq -r .status.phase)" == "Succeeded" ]]; then
   echo "${wf} failed!"
   exit 1
