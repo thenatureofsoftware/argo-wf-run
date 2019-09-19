@@ -23,12 +23,23 @@ buildDockerImage:
     - echo "${DOCKER_PWD}" | docker login --username ${DOCKER_USER} --password-stdin
     - docker push $REPO:rc
 
-testImage:
+testDagDiamondSteps:
+  stage: test
   image: ${REPO}:rc
   tags:
     - docker
   script:
-    - ./scripts/run-argo-wf.sh https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
+    - ./tests/testDagDiamondSteps.sh
+
+testGlobalParameters:
+  stage: test
+  image: ${REPO}:rc
+  tags:
+    - docker
+  variables:
+    AWR_WF_PARAMETERS: message%3A%20Hello%20World%20from%20argo-wf-run%5Cn
+  script:
+    - ./tests/testGlobalParameters.sh
 
 pushDockerImage:
   stage: push
