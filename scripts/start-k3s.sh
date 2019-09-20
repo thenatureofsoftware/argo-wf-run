@@ -22,6 +22,28 @@ function copyArtifacts() {
   fi
 }
 
+function storage_enabled() {
+  [[ "${AWR_WF_STORAGE}" == "true" ]]
+}
+
+function storage_provider_is_running() {
+  [[ $(kubectl get pods 2>/dev/null | grep '^csi-hostpath.* Running ' | wc -l) -eq 6 ]] && \
+  kubectl describe volumesnapshotclasses.snapshot.storage.k8s.io 2>/dev/null >/dev/null
+}
+
+function start_storage_provider() {
+  /csi-driver-host-path/deploy/kubernetes-1.15/deploy-hostpath.sh >/dev/null 2>&1 &
+  PID=$!
+  i=1
+  sp="/-\|"
+  echo -n ' '
+  while [ -d /proc/$PID ]; do
+    sleep 0.70
+    printf "\b${sp:i++%${#sp}:1}"
+  done
+  kubectl apply -f ${MANIFESTSDIR}/csi-storageclass.yaml >/dev/null 2>&1
+}
+
 function k3s_is_running() {
   $( k3d get-kubeconfig --name=${CLUSTER_NAME} >/dev/null 2>&1 ) && [[ -n "$(k3d list | grep -e 'argo-wf' | grep -e 'running')" ]]
 }
@@ -77,6 +99,14 @@ if [[ ! "${AWR_WF_SERVICE}" == "localhost" ]]; then
   sed -i -e "s/127.0.0.1/${AWR_WF_SERVICE}/g" ${KUBECONFIG}
 fi
 
+if storage_enabled && ! storage_provider_is_running; then
+  echo -n "Waiting for storage provider to start "
+  # The deploy script has it's own check script.
+  start_storage_provider
+  until storage_provider_is_running; do printf "."; sleep 2; done
+  echo " OK"
+fi
+
 # Start argo workflow
 if ! argo_is_running; then
   start_argo
@@ -99,7 +129,8 @@ fi
 
 trap "copyArtifacts" EXIT
 
-if [[ ! -z "${START_SHELL}" ]]; then
+if [[ ! -z "${AWR_WF_START_SHELL}" ]]; then
   export PS1="argo \w> "
   set +e
+  alias k='kubectl'
 fi

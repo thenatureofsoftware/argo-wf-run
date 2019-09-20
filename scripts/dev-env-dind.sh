@@ -25,5 +25,6 @@ docker run --rm -it \
 -e DOCKER_HOST=tcp://docker:2375/ \
 -e VERSION=${VERSION} \
 -e AWR_WF_SERVICE=docker \
+-e AWR_WF_START_SHELL=true \
 -v ${PWD}:/workspace \
 --network ${NETWORK} thenatureofsoftware/argo-wf-runner:${VERSION}
