@@ -2,7 +2,7 @@
 
 REPO_URL='https://github.com/TheNatureOfSoftware/argo-wf-run'
 APP_NAME='argo-wf-run'
-VERSION=${VERSION:-v0.3}
+VERSION=${VERSION:-v0.5.0}
 AWR_WF_SERVICE="localhost"
 AWR_WF_PARAMETERS=""
 
@@ -24,6 +24,7 @@ Flags:
   -p|--parameter                     Pass an input parameter
   --parameter-file                   Pass a file containing all input parameters
   -w|--wait                          Wait for the workflow to complete
+  -S|--storage                       Setup a storage provider
 
 Example:
   $ argo-wf-run -f https://raw.githubusercontent.com/argoproj/argo/master/examples/dag-diamond-steps.yaml
@@ -66,7 +67,7 @@ cleanUp() {
 onError() {
   result=$?
   if [ "$result" != "0" ]; then
-    echo -e "Failed to run $APP_NAME with the arguments provided: $@\n"
+    echo -e "\nFailed to run $APP_NAME with the arguments provided: ${INPUT_ARGUMENTS}\n"
     echo -e "\n\tFor help, go to $REPO_URL.\n"
   fi
   cleanUp
@@ -110,7 +111,10 @@ $(volumes) \
 }
 
 startShell() {
-  docker exec -it -e START_SHELL=true -w $(workDir) ${AWR_CONTAINER_ID} bash --rcfile "/argo-wf/scripts/start-k3s.sh"
+  docker exec -it \
+  -e AWR_WF_START_SHELL=true \
+  -e AWR_WF_STORAGE=${AWR_WF_STORAGE} \
+  -w $(workDir) ${AWR_CONTAINER_ID} bash --rcfile "/argo-wf/scripts/start-k3s.sh"
 }
 
 runWorkflow() {
@@ -125,6 +129,7 @@ runWorkflow() {
     wf_file="${AWR_WF_FILE}"
   fi
   docker exec -it \
+  -e AWR_WF_STORAGE=${AWR_WF_STORAGE:-false} \
   -e AWR_WF_PARAMETERS=$(urlencode "${AWR_WF_PARAMETERS}") \
   -w $(workDir) ${AWR_CONTAINER_ID} bash -x -c "/argo-wf/scripts/run-argo-wf.sh ${wf_file} ${AWR_WF_ARGO_ARGS[@]}"
 }
@@ -136,11 +141,15 @@ runWorkflow() {
 # Stop execution on any error
 trap "onError" EXIT
 set -e
+INPUT_ARGUMENTS="$@"
 
 # Replace GNU-style long options so that we can use getopts
 declare -a args
 for arg in "$@"; do
   case "$arg" in
+    '--help')
+      args+=('-h')
+      ;;
     '--filename')
       args+=('-f')
       ;;
@@ -152,6 +161,9 @@ for arg in "$@"; do
       ;;
     '--service')
       args+=('-s')
+      ;;
+    '--storage')
+      args+=('-S')
       ;;
     '--parameter'|-p)
       #args+=('-p')
@@ -181,7 +193,7 @@ for arg in "$@"; do
 done
 
 set -u
-while getopts ":f:v:d:s:p:P:wh" opt ${args[@]}; do
+while getopts ":f:v:d:s:p:P:whS" opt ${args[@]}; do
   case $opt in
     '--filename'|f)
       AWR_WF_FILE="${OPTARG}"
@@ -197,6 +209,9 @@ while getopts ":f:v:d:s:p:P:wh" opt ${args[@]}; do
       ;;
     '--wait'|w)
       AWR_WF_ARGO_ARGS+=("-$opt")
+      ;;
+    '--storage'|S)
+      AWR_WF_STORAGE=true
       ;;
     '--help'|h)
       help

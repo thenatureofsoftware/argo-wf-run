@@ -5,6 +5,8 @@ if [[ ! -f ./argo-wf-run ]]; then
   exit 1
 fi
 
+chmod +x ./tests/test*.sh
+
 for i in $(ls tests/test*.sh); do
   testName=$(basename $i)
   result="Succeeded"

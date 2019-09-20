@@ -2,13 +2,43 @@
 
 Let's you run any [Argo Workflow](https://github.com/argoproj/argo) from the command line using [`k3d`](https://github.com/rancher/k3d) and [`k3s`](https://github.com/rancher/k3s).
 
-## How it works
+```
+argo-wf-run runs an Argo workflow from the command line
 
-The `argo-wf-run` script starts a Docker `dind` container with `k3d` and starts
-a single node `k3s` cluster and deploys `argo-workflow`. The script runs the
-workflow using the Docker `exec` command.
+Usage:
+  argo-wf-run                        starts a shell for running workflows with argo cli
+  argo-wf-run (-f|--filename) FILE   runs argo submit with a single workflow
 
-When running in a GitLab CI/CD pipeline the Docker `dind` container is started as a `service` and the GitLab Runner starts the `argo-wf-run` container that connects to the Docker daemon on `tcp://docker:2375`.
+Flags:
+  -f|--filename                      Argo workflow file to run
+  -v|--volume                        Bind mount a volume
+  -d|--directory                     Write workflow output to directory
+  -s|--service                       The hostname where to find k3s
+  -p|--parameter                     Pass an input parameter
+  --parameter-file                   Pass a file containing all input parameters
+  -w|--wait                          Wait for the workflow to complete
+  -S|--storage                       Setup a storage provider
+
+Example:
+  $ export ARGO_EXAMPLES=https://raw.githubusercontent.com/argoproj/argo/master/examples
+  $ # Simple workflow
+  $ argo-wf-run -f $ARGO_EXAMPLES/dag-diamond-steps.yaml
+  $ # Supports parameters
+  $ argo-wf-run p message='Hello' -f $ARGO_EXAMPLES/global-parameters.yaml
+  $ # If your using volumes or pvc
+  $ argo-wf-run -S -f $ARGO_EXAMPLES/volumes-pvc.yaml
+```
+
+## How to install
+
+You need to have Docker installed.
+
+```
+$ curl -s -o /usr/local/bin/argo-wf-run \
+https://raw.githubusercontent.com/TheNatureOfSoftware/argo-wf-run/master/argo-wf-run \
+&& chmod +x /usr/local/bin/argo-wf-run
+$ argo-wf-run --help
+```
 
 ## Use Cases
 
@@ -80,7 +110,7 @@ build1:
 ```
 `.gitlab-ci.yaml`
 
-### Workflow artifacts
+## Workflow artifacts
 
 When a workflow produces output/artifact you need to add the `--directory|-d` flag to create
 a default artifact repository. When the `-d` flag is set `argo-wf-run` will configure a
@@ -89,4 +119,18 @@ directory when the workflow is finished.
 
 When running in a pipeline and invoking the `./scripts/run-argo-wf.sh` with a workflow
 that produces artifacts you need to make sure the `/argo-wf_artifacts` directory exists.
+
+## Default Storage Class
+
+The `-S|--storage` flag enables a default `storageclass` for the `k3s` cluster that can be
+utilized with `volumeClaimTemplates` or create your own, take a look at the
+[Argo Documentation](https://github.com/argoproj/argo/blob/master/examples/README.md#volumes).
+
+## How it works
+
+The `argo-wf-run` script starts a Docker `dind` container with `k3d` and starts
+a single node `k3s` cluster and deploys `argo-workflow`. The script runs the
+workflow using the Docker `exec` command.
+
+When running in a GitLab CI/CD pipeline the Docker `dind` container is started as a `service` and the GitLab Runner starts the `argo-wf-run` container that connects to the Docker daemon on `tcp://docker:2375`.
 
